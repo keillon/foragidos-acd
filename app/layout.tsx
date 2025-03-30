@@ -1,8 +1,7 @@
 import type React from "react"
 export const metadata = {
   title: "Foragidos da academia",
-  description: "Acompanhe sua jornada fitness",
-    generator: 'v0.dev'
+  description: "Acompanhe sua jornada fitness"
 }
 
 export default function RootLayout({

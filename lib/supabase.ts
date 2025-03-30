@@ -1,17 +1,20 @@
 import { createClient } from "@supabase/supabase-js"
 
+// Verificar se estamos no lado do cliente
+const isBrowser = typeof window !== "undefined"
+
 // Use environment variables for Supabase credentials with fallbacks
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://lgwjylyodovpyqlbrnsb.supabase.co"
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxnd2p5bHlvZG92cHlxbGJybnNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMyODY3OTUsImV4cCI6MjA1ODg2Mjc5NX0.6VTMasSg3fI3Np_ufLFNveGBHYNtMQNWHib9QfOGpJM"
 
-// Create client only if URL is valid
-export const supabase = supabaseUrl ? createClient(supabaseUrl, supabaseAnonKey) : null
+// Criar cliente apenas se estivermos no navegador e a URL for válida
+export const supabase = isBrowser && supabaseUrl ? createClient(supabaseUrl, supabaseAnonKey) : null
 
 // Helper function to check if Supabase is configured
 function checkSupabaseConfig() {
   if (!supabase) {
     console.error(
-      "Supabase not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.",
+      "Supabase not configured or running during build. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.",
     )
     return false
   }

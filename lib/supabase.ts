@@ -1,13 +1,27 @@
 import { createClient } from "@supabase/supabase-js"
 
-// Use environment variables for Supabase credentials
+// Use environment variables for Supabase credentials with fallbacks
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://lgwjylyodovpyqlbrnsb.supabase.co"
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxnd2p5bHlvZG92cHlxbGJybnNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMyODY3OTUsImV4cCI6MjA1ODg2Mjc5NX0.6VTMasSg3fI3Np_ufLFNveGBHYNtMQNWHib9QfOGpJM"
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Create client only if URL is valid
+export const supabase = supabaseUrl ? createClient(supabaseUrl, supabaseAnonKey) : null
+
+// Helper function to check if Supabase is configured
+function checkSupabaseConfig() {
+  if (!supabase) {
+    console.error(
+      "Supabase not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.",
+    )
+    return false
+  }
+  return true
+}
 
 // Funções auxiliares para autenticação - versão simplificada sem usar auth
 export async function signUp(username: string, password: string, name: string, photoUrl = "") {
+  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+
   // Primeiro, verificamos se o usuário já existe
   const { data: existingUser } = await supabase.from("users").select("username").eq("username", username).single()
 
@@ -45,6 +59,8 @@ export async function signUp(username: string, password: string, name: string, p
 }
 
 export async function signIn(username: string, password: string) {
+  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+
   const { data, error } = await supabase
     .from("users")
     .select("*")
@@ -66,11 +82,13 @@ export async function signOut() {
 
 // Funções para gerenciar visitas
 export async function registerVisit(userId: string) {
+  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+
   try {
     console.log("Iniciando registro de visita para usuário:", userId)
     const today = new Date()
 
-    // 1. Registrar a visita - CORRIGIDO: Adicionado await para garantir que a operação seja concluída
+    // 1. Registrar a visita
     const { data: visitData, error: visitError } = await supabase
       .from("visits")
       .insert([{ user_id: userId, visit_date: today.toISOString() }])
@@ -195,6 +213,8 @@ export async function registerVisit(userId: string) {
 
 // Função para verificar se o usuário já fez check-in hoje
 export async function hasCheckedInToday(userId: string) {
+  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+
   const today = new Date()
   const startOfDay = new Date(today)
   startOfDay.setHours(0, 0, 0, 0)
@@ -223,8 +243,10 @@ export async function hasCheckedInToday(userId: string) {
   return { checkedIn: !!data }
 }
 
-// Restante das funções permanecem iguais...
+// Restante das funções permanecem iguais, mas com verificação de configuração
 export async function getUserVisits(userId: string) {
+  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+
   const { data, error } = await supabase
     .from("visits")
     .select("visit_date")
@@ -236,6 +258,8 @@ export async function getUserVisits(userId: string) {
 }
 
 export async function getUserMonthlyPoints(userId: string) {
+  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+
   const { data, error } = await supabase
     .from("monthly_points")
     .select("*")
@@ -247,6 +271,8 @@ export async function getUserMonthlyPoints(userId: string) {
 }
 
 export async function getUserAchievements(userId: string) {
+  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+
   const { data, error } = await supabase
     .from("achievements")
     .select("*")
@@ -258,6 +284,8 @@ export async function getUserAchievements(userId: string) {
 }
 
 export async function getAllUsers() {
+  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+
   const { data, error } = await supabase.from("users").select("*")
 
   if (error) return { error }
@@ -265,6 +293,8 @@ export async function getAllUsers() {
 }
 
 export async function updateUserProfile(userId: string, name: string, photoUrl: string) {
+  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+
   const { data, error } = await supabase
     .from("users")
     .update({ name, photo_url: photoUrl })
@@ -277,6 +307,8 @@ export async function updateUserProfile(userId: string, name: string, photoUrl: 
 }
 
 export async function getMonthlyRanking() {
+  if (!checkSupabaseConfig()) return { ranking: [] }
+
   const today = new Date()
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
   const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59)
@@ -315,6 +347,8 @@ export async function getMonthlyRanking() {
 }
 
 export async function getPreviousMonthRanking() {
+  if (!checkSupabaseConfig()) return { ranking: [] }
+
   const today = new Date()
   const lastMonth = new Date(today)
   lastMonth.setMonth(lastMonth.getMonth() - 1)
@@ -351,6 +385,8 @@ export async function getPreviousMonthRanking() {
 }
 
 export async function getAllTimeRanking() {
+  if (!checkSupabaseConfig()) return { ranking: [] }
+
   // Buscar todos os usuários com seus pontos e visitas
   const { data: users, error: usersError } = await supabase
     .from("users")
@@ -377,90 +413,5 @@ export async function getAllTimeRanking() {
 
   // Ordenar por número de visitas (decrescente)
   return { ranking: userVisits.sort((a, b) => b.visits - a.visits) }
-}
-
-async function checkMonthlyWinner(currentUserId: string) {
-  const today = new Date()
-  const lastMonth = new Date(today)
-  lastMonth.setMonth(lastMonth.getMonth() - 1)
-  const lastMonthStr = `${lastMonth.getFullYear()}-${lastMonth.getMonth()}`
-
-  // Buscar todos os usuários
-  const { data: users } = await supabase.from("users").select("id, username")
-
-  if (!users || users.length === 0) return
-
-  // Para cada usuário, contar visitas do mês passado
-  const userVisitsPromises = users.map(async (user) => {
-    const startOfMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1)
-    const endOfMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0, 23, 59, 59)
-
-    const { data: visits, error } = await supabase
-      .from("visits")
-      .select("*")
-      .eq("user_id", user.id)
-      .gte("visit_date", startOfMonth.toISOString())
-      .lte("visit_date", endOfMonth.toISOString())
-
-    return {
-      userId: user.id,
-      username: user.username,
-      visits: visits ? visits.length : 0,
-    }
-  })
-
-  const userVisits = await Promise.all(userVisitsPromises)
-
-  // Encontrar o(s) vencedor(es)
-  const maxVisits = Math.max(...userVisits.map((u) => u.visits))
-  const winners = userVisits.filter((u) => u.visits === maxVisits && u.visits > 0)
-
-  if (winners.length > 0) {
-    const bonusPoints = 50
-    const currentMonth = `${today.getFullYear()}-${today.getMonth()}`
-
-    // Premiar cada vencedor
-    for (const winner of winners) {
-      // Buscar pontos atuais do usuário
-      const { data: userData } = await supabase.from("users").select("points").eq("id", winner.userId).single()
-
-      // Adicionar pontos ao usuário
-      await supabase
-        .from("users")
-        .update({
-          points: (userData?.points || 0) + bonusPoints,
-        })
-        .eq("id", winner.userId)
-
-      // Adicionar pontos mensais
-      const { data: existingPoints } = await supabase
-        .from("monthly_points")
-        .select("*")
-        .eq("user_id", winner.userId)
-        .eq("month", currentMonth)
-        .single()
-
-      if (existingPoints) {
-        await supabase
-          .from("monthly_points")
-          .update({ points: existingPoints.points + bonusPoints })
-          .eq("id", existingPoints.id)
-      } else {
-        await supabase
-          .from("monthly_points")
-          .insert([{ user_id: winner.userId, month: currentMonth, points: bonusPoints }])
-      }
-
-      // Registrar conquista
-      await supabase.from("achievements").insert([
-        {
-          user_id: winner.userId,
-          type: "competition_win",
-          description: `Vencedor da competição de ${lastMonth.toLocaleString("pt-BR", { month: "long" })}!`,
-          bonus_points: bonusPoints,
-        },
-      ])
-    }
-  }
 }
 

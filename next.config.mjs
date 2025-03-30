@@ -8,24 +8,44 @@ try {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: true
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: true
   },
   images: {
-    unoptimized: true,
+    unoptimized: true
   },
   experimental: {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,
-    parallelServerCompiles: true,
+    parallelServerCompiles: true
   },
+  // Add this section to exclude debug pages from the build
+  pageExtensions: ['tsx', 'ts', 'jsx', 'js', 'md', 'mdx'],
+  output: 'standalone',
+  // Exclude debug routes from production build
+  async rewrites () {
+    return [
+      {
+        source: '/debug-visit',
+        destination: '/404'
+      },
+      {
+        source: '/debug',
+        destination: '/404'
+      },
+      {
+        source: '/test',
+        destination: '/404'
+      }
+    ]
+  }
 }
 
 mergeConfig(nextConfig, userConfig)
 
-function mergeConfig(nextConfig, userConfig) {
+function mergeConfig (nextConfig, userConfig) {
   if (!userConfig) {
     return
   }
@@ -37,7 +57,7 @@ function mergeConfig(nextConfig, userConfig) {
     ) {
       nextConfig[key] = {
         ...nextConfig[key],
-        ...userConfig[key],
+        ...userConfig[key]
       }
     } else {
       nextConfig[key] = userConfig[key]

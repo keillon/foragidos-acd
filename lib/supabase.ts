@@ -1,38 +1,59 @@
 import { createClient } from "@supabase/supabase-js"
 
-// Verificar se estamos no lado do cliente
-const isBrowser = typeof window !== "undefined"
+// Função segura para criar o cliente Supabase
+function createSupabaseClient() {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Use environment variables for Supabase credentials with fallbacks
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://lgwjylyodovpyqlbrnsb.supabase.co"
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxnd2p5bHlvZG92cHlxbGJybnNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMyODY3OTUsImV4cCI6MjA1ODg2Mjc5NX0.6VTMasSg3fI3Np_ufLFNveGBHYNtMQNWHib9QfOGpJM"
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.warn("Variáveis de ambiente do Supabase não encontradas")
+      return null
+    }
 
-// Criar cliente apenas se estivermos no navegador e a URL for válida
-export const supabase = isBrowser && supabaseUrl ? createClient(supabaseUrl, supabaseAnonKey) : null
+    return createClient(supabaseUrl, supabaseAnonKey)
+  } catch (error) {
+    console.error("Erro ao criar cliente Supabase:", error)
+    return null
+  }
+}
+
+// Criar o cliente Supabase de forma segura
+export const supabase = createSupabaseClient()
 
 // Helper function to check if Supabase is configured
-function checkSupabaseConfig() {
+export function checkSupabaseConfig() {
   if (!supabase) {
-    console.error(
-      "Supabase not configured or running during build. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.",
-    )
+    console.warn("Supabase não configurado. Verifique as variáveis de ambiente.")
     return false
   }
   return true
 }
 
-// Funções auxiliares para autenticação - versão simplificada sem usar auth
-export async function signUp(username: string, password: string, name: string, photoUrl = "") {
-  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
-
-  // Primeiro, verificamos se o usuário já existe
-  const { data: existingUser } = await supabase.from("users").select("username").eq("username", username).single()
-
-  if (existingUser) {
-    return { error: { message: "Nome de usuário já existe" } }
+// Wrapper seguro para chamadas Supabase
+async function safeSupabaseCall(operation) {
+  if (!checkSupabaseConfig()) {
+    return { error: { message: "Supabase não configurado. Entre em contato com o administrador." } }
   }
 
   try {
+    return await operation()
+  } catch (error) {
+    console.error("Erro na operação Supabase:", error)
+    return { error: { message: "Erro ao comunicar com o servidor. Tente novamente." } }
+  }
+}
+
+// Funções auxiliares para autenticação - versão simplificada sem usar auth
+export async function signUp(username: string, password: string, name: string, photoUrl = "") {
+  return safeSupabaseCall(async () => {
+    // Primeiro, verificamos se o usuário já existe
+    const { data: existingUser } = await supabase.from("users").select("username").eq("username", username).single()
+
+    if (existingUser) {
+      return { error: { message: "Nome de usuário já existe" } }
+    }
+
     // Criamos o usuário diretamente na tabela users
     const { data, error } = await supabase
       .from("users")
@@ -55,27 +76,24 @@ export async function signUp(username: string, password: string, name: string, p
     }
 
     return { user: data }
-  } catch (err) {
-    console.error("Erro ao criar usuário:", err)
-    return { error: { message: "Erro ao criar usuário" } }
-  }
+  })
 }
 
 export async function signIn(username: string, password: string) {
-  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+  return safeSupabaseCall(async () => {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("username", username)
+      .eq("password", password) // Em produção, use autenticação do Supabase
+      .single()
 
-  const { data, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("username", username)
-    .eq("password", password) // Em produção, use autenticação do Supabase
-    .single()
+    if (error || !data) {
+      return { error: { message: "Usuário ou senha inválidos" } }
+    }
 
-  if (error || !data) {
-    return { error: { message: "Usuário ou senha inválidos" } }
-  }
-
-  return { user: data }
+    return { user: data }
+  })
 }
 
 export async function signOut() {
@@ -85,9 +103,7 @@ export async function signOut() {
 
 // Funções para gerenciar visitas
 export async function registerVisit(userId: string) {
-  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
-
-  try {
+  return safeSupabaseCall(async () => {
     console.log("Iniciando registro de visita para usuário:", userId)
     const today = new Date()
 
@@ -208,213 +224,210 @@ export async function registerVisit(userId: string) {
     }
 
     return { user: updatedUser }
-  } catch (err) {
-    console.error("Erro inesperado ao registrar visita:", err)
-    return { error: err }
-  }
+  })
 }
 
 // Função para verificar se o usuário já fez check-in hoje
 export async function hasCheckedInToday(userId: string) {
-  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+  return safeSupabaseCall(async () => {
+    const today = new Date()
+    const startOfDay = new Date(today)
+    startOfDay.setHours(0, 0, 0, 0)
+    const endOfDay = new Date(today)
+    endOfDay.setHours(23, 59, 59, 999)
 
-  const today = new Date()
-  const startOfDay = new Date(today)
-  startOfDay.setHours(0, 0, 0, 0)
-  const endOfDay = new Date(today)
-  endOfDay.setHours(23, 59, 59, 999)
+    console.log("Verificando check-in para o usuário:", userId)
+    console.log("Período de verificação:", startOfDay.toISOString(), "até", endOfDay.toISOString())
 
-  console.log("Verificando check-in para o usuário:", userId)
-  console.log("Período de verificação:", startOfDay.toISOString(), "até", endOfDay.toISOString())
+    const { data, error } = await supabase
+      .from("visits")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("visit_date", startOfDay.toISOString())
+      .lte("visit_date", endOfDay.toISOString())
+      .single()
 
-  const { data, error } = await supabase
-    .from("visits")
-    .select("*")
-    .eq("user_id", userId)
-    .gte("visit_date", startOfDay.toISOString())
-    .lte("visit_date", endOfDay.toISOString())
-    .single()
+    console.log("Resultado da verificação:", { data, error })
 
-  console.log("Resultado da verificação:", { data, error })
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 é o código para "nenhum resultado encontrado"
+      console.error("Erro ao verificar check-in:", error)
+      return { error }
+    }
 
-  if (error && error.code !== "PGRST116") {
-    // PGRST116 é o código para "nenhum resultado encontrado"
-    console.error("Erro ao verificar check-in:", error)
-    return { error }
-  }
-
-  return { checkedIn: !!data }
+    return { checkedIn: !!data }
+  })
 }
 
-// Restante das funções permanecem iguais, mas com verificação de configuração
+// Restante das funções permanecem iguais, mas com o wrapper de segurança
 export async function getUserVisits(userId: string) {
-  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+  return safeSupabaseCall(async () => {
+    const { data, error } = await supabase
+      .from("visits")
+      .select("visit_date")
+      .eq("user_id", userId)
+      .order("visit_date", { ascending: true })
 
-  const { data, error } = await supabase
-    .from("visits")
-    .select("visit_date")
-    .eq("user_id", userId)
-    .order("visit_date", { ascending: true })
-
-  if (error) return { error }
-  return { visits: data.map((v) => v.visit_date) }
+    if (error) return { error }
+    return { visits: data.map((v) => v.visit_date) }
+  })
 }
 
 export async function getUserMonthlyPoints(userId: string) {
-  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+  return safeSupabaseCall(async () => {
+    const { data, error } = await supabase
+      .from("monthly_points")
+      .select("*")
+      .eq("user_id", userId)
+      .order("month", { ascending: true })
 
-  const { data, error } = await supabase
-    .from("monthly_points")
-    .select("*")
-    .eq("user_id", userId)
-    .order("month", { ascending: true })
-
-  if (error) return { error }
-  return { monthlyPoints: data }
+    if (error) return { error }
+    return { monthlyPoints: data }
+  })
 }
 
 export async function getUserAchievements(userId: string) {
-  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+  return safeSupabaseCall(async () => {
+    const { data, error } = await supabase
+      .from("achievements")
+      .select("*")
+      .eq("user_id", userId)
+      .order("achieved_at", { ascending: false })
 
-  const { data, error } = await supabase
-    .from("achievements")
-    .select("*")
-    .eq("user_id", userId)
-    .order("achieved_at", { ascending: false })
-
-  if (error) return { error }
-  return { achievements: data }
+    if (error) return { error }
+    return { achievements: data }
+  })
 }
 
 export async function getAllUsers() {
-  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+  return safeSupabaseCall(async () => {
+    const { data, error } = await supabase.from("users").select("*")
 
-  const { data, error } = await supabase.from("users").select("*")
-
-  if (error) return { error }
-  return { users: data }
+    if (error) return { error }
+    return { users: data }
+  })
 }
 
 export async function updateUserProfile(userId: string, name: string, photoUrl: string) {
-  if (!checkSupabaseConfig()) return { error: { message: "Supabase not configured" } }
+  return safeSupabaseCall(async () => {
+    const { data, error } = await supabase
+      .from("users")
+      .update({ name, photo_url: photoUrl })
+      .eq("id", userId)
+      .select()
+      .single()
 
-  const { data, error } = await supabase
-    .from("users")
-    .update({ name, photo_url: photoUrl })
-    .eq("id", userId)
-    .select()
-    .single()
-
-  if (error) return { error }
-  return { user: data }
+    if (error) return { error }
+    return { user: data }
+  })
 }
 
 export async function getMonthlyRanking() {
-  if (!checkSupabaseConfig()) return { ranking: [] }
+  return safeSupabaseCall(async () => {
+    const today = new Date()
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59)
 
-  const today = new Date()
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59)
+    // Buscar todos os usuários
+    const { data: users, error: usersError } = await supabase
+      .from("users")
+      .select("id, username, name, photo_url, streak, points")
 
-  // Buscar todos os usuários
-  const { data: users, error: usersError } = await supabase
-    .from("users")
-    .select("id, username, name, photo_url, streak, points")
+    if (usersError || !users) return { error: usersError }
 
-  if (usersError || !users) return { error: usersError }
+    // Para cada usuário, contar visitas do mês atual
+    const userVisitsPromises = users.map(async (user) => {
+      const { data: visits } = await supabase
+        .from("visits")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("visit_date", startOfMonth.toISOString())
+        .lte("visit_date", endOfMonth.toISOString())
 
-  // Para cada usuário, contar visitas do mês atual
-  const userVisitsPromises = users.map(async (user) => {
-    const { data: visits } = await supabase
-      .from("visits")
-      .select("*")
-      .eq("user_id", user.id)
-      .gte("visit_date", startOfMonth.toISOString())
-      .lte("visit_date", endOfMonth.toISOString())
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        photoUrl: user.photo_url,
+        visits: visits ? visits.length : 0,
+        streak: user.streak || 0,
+        points: user.points || 0,
+      }
+    })
 
-    return {
-      id: user.id,
-      name: user.name,
-      username: user.username,
-      photoUrl: user.photo_url,
-      visits: visits ? visits.length : 0,
-      streak: user.streak || 0,
-      points: user.points || 0,
-    }
+    const userVisits = await Promise.all(userVisitsPromises)
+
+    // Ordenar por número de visitas (decrescente)
+    return { ranking: userVisits.sort((a, b) => b.visits - a.visits) }
   })
-
-  const userVisits = await Promise.all(userVisitsPromises)
-
-  // Ordenar por número de visitas (decrescente)
-  return { ranking: userVisits.sort((a, b) => b.visits - a.visits) }
 }
 
 export async function getPreviousMonthRanking() {
-  if (!checkSupabaseConfig()) return { ranking: [] }
+  return safeSupabaseCall(async () => {
+    const today = new Date()
+    const lastMonth = new Date(today)
+    lastMonth.setMonth(lastMonth.getMonth() - 1)
+    const startOfMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1)
+    const endOfMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0, 23, 59, 59)
 
-  const today = new Date()
-  const lastMonth = new Date(today)
-  lastMonth.setMonth(lastMonth.getMonth() - 1)
-  const startOfMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1)
-  const endOfMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0, 23, 59, 59)
+    // Buscar todos os usuários
+    const { data: users, error: usersError } = await supabase.from("users").select("id, username, name, photo_url")
 
-  // Buscar todos os usuários
-  const { data: users, error: usersError } = await supabase.from("users").select("id, username, name, photo_url")
+    if (usersError || !users) return { error: usersError }
 
-  if (usersError || !users) return { error: usersError }
+    // Para cada usuário, contar visitas do mês passado
+    const userVisitsPromises = users.map(async (user) => {
+      const { data: visits } = await supabase
+        .from("visits")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("visit_date", startOfMonth.toISOString())
+        .lte("visit_date", endOfMonth.toISOString())
 
-  // Para cada usuário, contar visitas do mês passado
-  const userVisitsPromises = users.map(async (user) => {
-    const { data: visits } = await supabase
-      .from("visits")
-      .select("*")
-      .eq("user_id", user.id)
-      .gte("visit_date", startOfMonth.toISOString())
-      .lte("visit_date", endOfMonth.toISOString())
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        photoUrl: user.photo_url,
+        visits: visits ? visits.length : 0,
+      }
+    })
 
-    return {
-      id: user.id,
-      name: user.name,
-      username: user.username,
-      photoUrl: user.photo_url,
-      visits: visits ? visits.length : 0,
-    }
+    const userVisits = await Promise.all(userVisitsPromises)
+
+    // Ordenar por número de visitas (decrescente)
+    return { ranking: userVisits.sort((a, b) => b.visits - a.visits) }
   })
-
-  const userVisits = await Promise.all(userVisitsPromises)
-
-  // Ordenar por número de visitas (decrescente)
-  return { ranking: userVisits.sort((a, b) => b.visits - a.visits) }
 }
 
 export async function getAllTimeRanking() {
-  if (!checkSupabaseConfig()) return { ranking: [] }
+  return safeSupabaseCall(async () => {
+    // Buscar todos os usuários com seus pontos e visitas
+    const { data: users, error: usersError } = await supabase
+      .from("users")
+      .select("id, username, name, photo_url, points, streak")
 
-  // Buscar todos os usuários com seus pontos e visitas
-  const { data: users, error: usersError } = await supabase
-    .from("users")
-    .select("id, username, name, photo_url, points, streak")
+    if (usersError || !users) return { error: usersError }
 
-  if (usersError || !users) return { error: usersError }
+    // Para cada usuário, contar o total de visitas
+    const userVisitsPromises = users.map(async (user) => {
+      const { data: visits } = await supabase.from("visits").select("*").eq("user_id", user.id)
 
-  // Para cada usuário, contar o total de visitas
-  const userVisitsPromises = users.map(async (user) => {
-    const { data: visits } = await supabase.from("visits").select("*").eq("user_id", user.id)
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        photoUrl: user.photo_url,
+        visits: visits ? visits.length : 0,
+        streak: user.streak || 0,
+        points: user.points || 0,
+      }
+    })
 
-    return {
-      id: user.id,
-      name: user.name,
-      username: user.username,
-      photoUrl: user.photo_url,
-      visits: visits ? visits.length : 0,
-      streak: user.streak || 0,
-      points: user.points || 0,
-    }
+    const userVisits = await Promise.all(userVisitsPromises)
+
+    // Ordenar por número de visitas (decrescente)
+    return { ranking: userVisits.sort((a, b) => b.visits - a.visits) }
   })
-
-  const userVisits = await Promise.all(userVisitsPromises)
-
-  // Ordenar por número de visitas (decrescente)
-  return { ranking: userVisits.sort((a, b) => b.visits - a.visits) }
 }
 

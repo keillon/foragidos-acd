@@ -3,8 +3,8 @@ import { createClient } from "@supabase/supabase-js"
 // Função para obter as variáveis de ambiente com fallback para desenvolvimento
 function getEnvVariables() {
   // Verificar se as variáveis estão definidas
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://lgwjylyodovpyqlbrnsb.supabase.co"
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxnd2p5bHlvZG92cHlxbGJybnNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMyODY3OTUsImV4cCI6MjA1ODg2Mjc5NX0.6VTMasSg3fI3Np_ufLFNveGBHYNtMQNWHib9QfOGpJM"
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 
   // Log para debug
   console.log("Variáveis de ambiente:", {
@@ -25,6 +25,13 @@ function createSupabaseClient() {
       return null
     }
 
+    // Verificar se a URL está no formato correto
+    if (!supabaseUrl.startsWith("https://")) {
+      console.error("URL do Supabase inválida. Deve começar com https://")
+      return null
+    }
+
+    // Criar cliente com as variáveis de ambiente
     return createClient(supabaseUrl, supabaseAnonKey)
   } catch (error) {
     console.error("Erro ao criar cliente Supabase:", error)
@@ -43,6 +50,13 @@ export function checkSupabaseConfig() {
     console.warn("Supabase não configurado. Verifique as variáveis de ambiente.")
     return false
   }
+
+  // Verificar formato da URL
+  if (!supabaseUrl.startsWith("https://")) {
+    console.warn("URL do Supabase inválida. Deve começar com https://")
+    return false
+  }
+
   return true
 }
 

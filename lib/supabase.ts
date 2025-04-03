@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 
-// Substitua estas variáveis pelas suas credenciais do Supabase
+// Use environment variables for Supabase credentials
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://lgwjylyodovpyqlbrnsb.supabase.co"
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxnd2p5bHlvZG92cHlxbGJybnNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMyODY3OTUsImV4cCI6MjA1ODg2Mjc5NX0.6VTMasSg3fI3Np_ufLFNveGBHYNtMQNWHib9QfOGpJM"
 
@@ -70,7 +70,7 @@ export async function registerVisit(userId: string) {
     console.log("Iniciando registro de visita para usuário:", userId)
     const today = new Date()
 
-    // 1. Registrar a visita
+    // 1. Registrar a visita - CORRIGIDO: Adicionado await para garantir que a operação seja concluída
     const { data: visitData, error: visitError } = await supabase
       .from("visits")
       .insert([{ user_id: userId, visit_date: today.toISOString() }])
@@ -91,7 +91,7 @@ export async function registerVisit(userId: string) {
     const yesterdayEnd = new Date(yesterday)
     yesterdayEnd.setHours(23, 59, 59, 999)
 
-    const { data: yesterdayVisit } = await supabase
+    const { data: yesterdayVisit, error: yesterdayError } = await supabase
       .from("visits")
       .select("*")
       .eq("user_id", userId)
@@ -99,8 +99,21 @@ export async function registerVisit(userId: string) {
       .lte("visit_date", yesterdayEnd.toISOString())
       .single()
 
+    if (yesterdayError && yesterdayError.code !== "PGRST116") {
+      console.error("Erro ao verificar visita de ontem:", yesterdayError)
+    }
+
     // 3. Buscar dados atuais do usuário
-    const { data: userData } = await supabase.from("users").select("streak, points").eq("id", userId).single()
+    const { data: userData, error: userDataError } = await supabase
+      .from("users")
+      .select("streak, points")
+      .eq("id", userId)
+      .single()
+
+    if (userDataError) {
+      console.error("Erro ao buscar dados do usuário:", userDataError)
+      return { error: userDataError }
+    }
 
     // 4. Calcular novo streak
     let newStreak = 1 // Padrão: reiniciar streak
@@ -109,8 +122,12 @@ export async function registerVisit(userId: string) {
       newStreak = (userData?.streak || 0) + 1
     }
 
+    console.log("Novo streak calculado:", newStreak)
+
     // 5. Calcular novos pontos
     const newPoints = (userData?.points || 0) + 10
+
+    console.log("Novos pontos calculados:", newPoints)
 
     // 6. Atualizar usuário diretamente sem usar RPC
     const { data: updatedUser, error: userError } = await supabase
@@ -135,22 +152,38 @@ export async function registerVisit(userId: string) {
     const currentMonth = `${today.getFullYear()}-${today.getMonth()}`
 
     // Verificar se já existe registro para este mês
-    const { data: existingPoints } = await supabase
+    const { data: existingPoints, error: pointsQueryError } = await supabase
       .from("monthly_points")
       .select("*")
       .eq("user_id", userId)
       .eq("month", currentMonth)
       .single()
 
+    if (pointsQueryError && pointsQueryError.code !== "PGRST116") {
+      console.error("Erro ao buscar pontos mensais:", pointsQueryError)
+    }
+
+    let monthlyPointsResult
+
     if (existingPoints) {
       // Atualizar pontos existentes
-      await supabase
+      monthlyPointsResult = await supabase
         .from("monthly_points")
         .update({ points: existingPoints.points + 10 })
         .eq("id", existingPoints.id)
+        .select()
     } else {
       // Criar novo registro de pontos
-      await supabase.from("monthly_points").insert([{ user_id: userId, month: currentMonth, points: 10 }])
+      monthlyPointsResult = await supabase
+        .from("monthly_points")
+        .insert([{ user_id: userId, month: currentMonth, points: 10 }])
+        .select()
+    }
+
+    if (monthlyPointsResult.error) {
+      console.error("Erro ao atualizar pontos mensais:", monthlyPointsResult.error)
+    } else {
+      console.log("Pontos mensais atualizados com sucesso:", monthlyPointsResult.data)
     }
 
     return { user: updatedUser }
